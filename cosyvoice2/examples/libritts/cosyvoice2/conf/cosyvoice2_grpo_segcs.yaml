@@ -1,0 +1,438 @@
+# set random seed, so that you may reproduce your result.
+__set_seed1: !apply:random.seed [1986]
+__set_seed2: !apply:numpy.random.seed [1986]
+__set_seed3: !apply:torch.manual_seed [1986]
+__set_seed4: !apply:torch.cuda.manual_seed_all [1986]
+
+# fixed params
+sample_rate: 24000
+llm_input_size: 896
+llm_output_size: 896
+spk_embed_dim: 192
+qwen_pretrain_path: ''
+token_frame_rate: 25
+token_mel_ratio: 2
+
+# stream related params
+chunk_size: 25 # streaming inference chunk size, in token
+num_decoding_left_chunks: -1 # streaming inference flow decoder left chunk size, <0 means use all left chunks
+
+# model params
+# for all class/function included in this repo, we use !<name> or !<new> for intialization, so that user may find all corresponding class/function according to one single yaml.
+# for system/third_party class/function, we do not require this.
+llm: !new:cosyvoice.llm.llm.Qwen2LM
+    llm_input_size: !ref <llm_input_size>
+    llm_output_size: !ref <llm_output_size>
+    speech_token_size: 6561
+    length_normalized_loss: True
+    lsm_weight: 0
+    mix_ratio: [5, 15]
+    llm: !new:cosyvoice.llm.llm.Qwen2Encoder
+        pretrain_path: !ref <qwen_pretrain_path>
+    sampling: !name:cosyvoice.utils.common.ras_sampling
+        top_p: 0.8
+        top_k: 25
+        win_size: 10
+        tau_r: 0.1
+
+flow: !new:cosyvoice.flow.flow.CausalMaskedDiffWithXvec
+    input_size: 512
+    output_size: 80
+    spk_embed_dim: !ref <spk_embed_dim>
+    output_type: 'mel'
+    vocab_size: 6561
+    input_frame_rate: !ref <token_frame_rate>
+    only_mask_loss: True
+    token_mel_ratio: !ref <token_mel_ratio>
+    pre_lookahead_len: 3
+    encoder: !new:cosyvoice.transformer.upsample_encoder.UpsampleConformerEncoder
+        output_size: 512
+        attention_heads: 8
+        linear_units: 2048
+        num_blocks: 6
+        dropout_rate: 0.1
+        positional_dropout_rate: 0.1
+        attention_dropout_rate: 0.1
+        normalize_before: True
+        input_layer: 'linear'
+        pos_enc_layer_type: 'rel_pos_espnet'
+        selfattention_layer_type: 'rel_selfattn'
+        input_size: 512
+        use_cnn_module: False
+        macaron_style: False
+        static_chunk_size: !ref <chunk_size>
+    decoder: !new:cosyvoice.flow.flow_matching.CausalConditionalCFM
+        in_channels: 240
+        n_spks: 1
+        spk_emb_dim: 80
+        cfm_params: !new:omegaconf.DictConfig
+            content:
+                sigma_min: 1e-06
+                solver: 'euler'
+                t_scheduler: 'cosine'
+                training_cfg_rate: 0.2
+                inference_cfg_rate: 0.7
+                reg_loss_type: 'l1'
+        estimator: !new:cosyvoice.flow.decoder.CausalConditionalDecoder
+            in_channels: 320
+            out_channels: 80
+            channels: [256]
+            dropout: 0.0
+            attention_head_dim: 64
+            n_blocks: 4
+            num_mid_blocks: 12
+            num_heads: 8
+            act_fn: 'gelu'
+            static_chunk_size: !ref <chunk_size> * <token_mel_ratio>
+            num_decoding_left_chunks: !ref <num_decoding_left_chunks>
+
+hift: !new:cosyvoice.hifigan.generator.HiFTGenerator
+    in_channels: 80
+    base_channels: 512
+    nb_harmonics: 8
+    sampling_rate: !ref <sample_rate>
+    nsf_alpha: 0.1
+    nsf_sigma: 0.003
+    nsf_voiced_threshold: 10
+    upsample_rates: [8, 5, 3]
+    upsample_kernel_sizes: [16, 11, 7]
+    istft_params:
+        n_fft: 16
+        hop_len: 4
+    resblock_kernel_sizes: [3, 7, 11]
+    resblock_dilation_sizes: [[1, 3, 5], [1, 3, 5], [1, 3, 5]]
+    source_resblock_kernel_sizes: [7, 7, 11]
+    source_resblock_dilation_sizes: [[1, 3, 5], [1, 3, 5], [1, 3, 5]]
+    lrelu_slope: 0.1
+    audio_limit: 0.99
+    f0_predictor: !new:cosyvoice.hifigan.f0_predictor.ConvRNNF0Predictor
+        num_class: 1
+        in_channels: 80
+        cond_channels: 512
+
+# gan related module
+mel_spec_transform1: !name:matcha.utils.audio.mel_spectrogram
+    n_fft: 1920
+    num_mels: 80
+    sampling_rate: !ref <sample_rate>
+    hop_size: 480
+    win_size: 1920
+    fmin: 0
+    fmax: null
+    center: False
+hifigan: !new:cosyvoice.hifigan.hifigan.HiFiGan
+    generator: !ref <hift>
+    discriminator: !new:cosyvoice.hifigan.discriminator.MultipleDiscriminator
+        mpd: !new:matcha.hifigan.models.MultiPeriodDiscriminator
+        mrd: !new:cosyvoice.hifigan.discriminator.MultiResSpecDiscriminator
+    mel_spec_transform: [
+        !ref <mel_spec_transform1>
+    ]
+
+# processor functions
+parquet_opener: !name:cosyvoice.dataset.processor.parquet_opener
+get_tokenizer: !name:cosyvoice.tokenizer.tokenizer.get_qwen_tokenizer
+    token_path: !ref <qwen_pretrain_path>
+    skip_special_tokens: True
+allowed_special: 'all'
+tokenize: !name:cosyvoice.dataset.processor.tokenize
+    get_tokenizer: !ref <get_tokenizer>
+    allowed_special: !ref <allowed_special>
+filter: !name:cosyvoice.dataset.processor.filter
+    max_length: 6000
+    min_length: 100
+    token_max_length: 200
+    token_min_length: 1
+resample: !name:cosyvoice.dataset.processor.resample
+    resample_rate: !ref <sample_rate>
+truncate: !name:cosyvoice.dataset.processor.truncate
+    truncate_length: 24480 # must be a multiplier of hop_size
+feat_extractor: !name:matcha.utils.audio.mel_spectrogram
+    n_fft: 1920
+    num_mels: 80
+    sampling_rate: !ref <sample_rate>
+    hop_size: 480
+    win_size: 1920
+    fmin: 0
+    fmax: 8000
+    center: False
+compute_fbank: !name:cosyvoice.dataset.processor.compute_fbank
+    feat_extractor: !ref <feat_extractor>
+    num_frames: 960
+compute_whisper_fbank: !name:cosyvoice.dataset.processor.compute_whisper_fbank
+    num_frames: 960
+compute_f0: !name:cosyvoice.dataset.processor.compute_f0
+    sample_rate: !ref <sample_rate>
+    hop_size: 480
+parse_embedding: !name:cosyvoice.dataset.processor.parse_embedding
+    normalize: True
+shuffle: !name:cosyvoice.dataset.processor.shuffle
+    shuffle_size: 1000
+sort: !name:cosyvoice.dataset.processor.sort
+    sort_size: 500  # sort_size should be less than shuffle_size
+batch: !name:cosyvoice.dataset.processor.batch
+    batch_type: 'dynamic'
+    max_frames_in_batch: 2000
+padding: !name:cosyvoice.dataset.processor.padding
+    use_spk_embedding: False # change to True during sft
+
+
+# dataset processor pipeline
+data_pipeline: [
+    !ref <parquet_opener>,
+    !ref <tokenize>,
+    !ref <filter>,
+    !ref <resample>,
+    !ref <compute_fbank>,
+    !ref <parse_embedding>,
+    !ref <compute_whisper_fbank>,
+    !ref <shuffle>,
+    !ref <sort>,
+    !ref <batch>,
+    !ref <padding>,
+]
+data_pipeline_gan: [
+    !ref <parquet_opener>,
+    !ref <tokenize>,
+    !ref <filter>,
+    !ref <resample>,
+    !ref <truncate>,
+    !ref <compute_fbank>,
+    !ref <compute_f0>,
+    !ref <parse_embedding>,
+    !ref <shuffle>,
+    !ref <sort>,
+    !ref <batch>,
+    !ref <padding>,
+]
+
+# llm train conf -- FULL GRPO (ratio + clip + KL) with the alignment-score reward.
+#
+# conf/cosyvoice2_grpo_align.yaml is the plain-REINFORCE variant: it takes one gradient
+# step per rollout batch, where the importance ratio is exactly 1 and clipping is inert.
+# This config reuses each rollout ppo_epochs times, which makes the samples off-policy and
+# is where ratio + clip actually do work. Generation is ~2s per rollout and dominates a
+# 70s batch, so reuse is the cheapest way to get more updates.
+#
+# Everything above is identical to cosyvoice2_sft.yaml so the only differences between the
+# SFT and RL runs are the objective and the schedule below.
+#
+# RL is far more expensive per sample than SFT: every batch item is decoded `rollout_n`
+# times, each rollout is turned into audio by the frozen flow+hift, and each is force-
+# aligned and transcribed. Measured reward cost alone is ~1s per rollout, so a batch of
+# 4 items x 4 rollouts is ~16s of reward on top of sampling. Keep max_epoch small and
+# max_frames_in_batch low, and judge progress by CV mean reward rather than epochs.
+train_conf:
+    optim: adam
+    optim_conf:
+        lr: 1e-6 # RL perturbs an already-good policy; 1e-5 (sft) is far too hot here
+    scheduler: constantlr # too few steps for a warmup+decay shape to mean anything
+    scheduler_conf:
+        warmup_steps: 100
+    max_epoch: 1
+    grad_clip: 5
+    accum_grad: 2         # run_grpo_kl.sh used 4 GPUs with accum_grad 1. This recipe runs
+                          # on 2, so the accumulation doubles and the effective batch
+                          # (gpus x max_frames_in_batch x accum) is identical:
+                          #   4 x 2000 x 1  ==  2 x 2000 x 2
+    log_interval: 10
+    save_per_step: 20     # CV + checkpoint every N optimizer steps. An RL epoch runs
+                          # 12-24h, so -1 (end of epoch only) leaves the whole run with no
+                          # checkpoint and no early-stop signal.
+
+grpo_conf:
+    # 'mer'        = decoded mix error rate from the CS-fine-tuned Whisper  <- this config
+    # 'phoneme'    = teacher-forced phoneme CTC
+    # 'whisper_ll' = teacher-forced Whisper log-likelihood
+    # 'align' / 'wer' / 'duration' = earlier attempts, see the other configs
+    #
+    # This run exists as the BASELINE for the phoneme reward: it optimises the metric the
+    # paper reports, directly. reward_cs_wer.py had to crop every language span and decode
+    # each under its own tag, because stock ASR writes Korean-embedded English in Hangul
+    # and a full-utterance WER carried no gradient for the embedded language. whisper_ft/
+    # removed that constraint -- on real human recordings, stock -> fine-tuned:
+    #
+    #     SwitchLingua test    MER 28.74% -> 5.87%   English lost 28.1% -> 0.2%
+    #     cs-fleurs (unseen)   MER 29.17% -> 12.76%  English lost 32.3% -> 2.0%
+    #
+    # so one full-utterance decode is now enough, and the errors are split by
+    # reference-token script afterwards using the aligner's own chunks.
+    #
+    # Two known weaknesses, and they are the argument for the phoneme reward:
+    #   LEAKAGE  the scorer was fine-tuned on data/<lang>/train, which is where
+    #            run_grpo_mer.sh draws SwitchLingua prompts from. It has memorised those
+    #            reference texts, so it is lenient exactly where the policy trains. Set
+    #            langs="" in the run script to train on cs-fleurs alone for a clean read.
+    #   HACKING  a decoded WER pays for slow over-articulation, and this corpus already
+    #            shows that failure (kor-eng speaking rate fell 45% after SFT while
+    #            staying readable). Watch rollout durations, not just the reward.
+    reward: segment
+    min_span_sec_align: 0.0
+
+    # ================================================== SEGMENT-WISE ADVANTAGE
+    # One advantage per SEGMENT of the sentence, not one per rollout. Each segment is scored
+    # on its own by character error rate, normalised across the group on its own, and its
+    # advantage lands only on its own speech tokens -- so inside ONE take different segments
+    # can pull in opposite directions:
+    #
+    #   tokens:     [저는] [Netflix] [original] [seri] [를 봐요]
+    #   advantage:    0     -1.73      +0.67     +0.39     0
+    #
+    # WHY CER AND NOT RIGHT/WRONG. Four takes that all miss a word -- seriez / serious /
+    # 시리즈 / seri -- score identically under word-level right/wrong, the group spread is
+    # zero and the word teaches nothing. By character: 0.83 / 0.67 / 0.00 / 0.67, and the
+    # gradient runs from 'nearly right' to 'fully assimilated into Korean'.
+    #
+    # WHICH SEGMENTS TRAIN IS DECIDED BY THE DATA. A segment the four takes agree on has zero
+    # spread and is skipped; one they disagree on is trained. Nothing here says 'English' --
+    # that is just where disagreement concentrates. A matrix-language segment the takes
+    # render differently is trained the same way.
+    #
+    # The ablation ladder is now three rungs on the same scorer and data:
+    #   cosyvoice2_grpo_mer.yaml          one scalar, spread over every token
+    #   cosyvoice2_grpo_mer_enspan.yaml   one scalar, English tokens only
+    #   this file                          one advantage per segment
+    segment_advantage: true
+
+    # --- reward: segment (examples/grpo/cosyvoice2/reward_cs_segment.py) ---
+    # MER's own token is one CJK/Hangul character or one Latin word. Used directly it is both
+    # too short to align (one Hangul character is 4-6 speech tokens, at the limit of what
+    # cross-attention resolves) and back to binary (a 1-character CER is 0 or 1, the very
+    # degeneracy this reward removes). So Latin words stay whole and CJK/Hangul runs are
+    # chunked seg_chunk_chars at a time, giving ~600 ms segments and scores on 0/1/3/2/3/1.
+    # TWO GROUPS: the embedded language against the matrix language, pooled across the
+    # whole utterance however many times it switches.
+    #
+    #     안녕하세요 meeting이 있습니다
+    #       -> [안녕하세요 + 이 있습니다] one score,  [meeting] another
+    #
+    # The spans stay separate because the forced aligner needs contiguous character ranges,
+    # but they share a score and therefore an advantage: every matrix token of the utterance
+    # moves together, and every embedded token moves together.
+    #
+    # This is the direct ablation of cosyvoice2_grpo_segswitch.yaml -- same spans, same
+    # alignment, same reward model; only the pooling differs. The pair isolates "does
+    # splitting a language into its separate runs help, or is separating the two languages
+    # enough?". Against cosyvoice2_grpo_mer_enspan.yaml it also isolates the scoring unit:
+    # enspan uses a word-level MER over the English only and leaves the matrix side with no
+    # gradient at all, while this scores both sides by character error rate.
+    #
+    # The cost is all the localisation inside a language: a single bad character anywhere in
+    # the matrix language moves every matrix token of the utterance.
+    seg_unit: cs
+    seg_chunk_chars: 3       # unused when seg_unit is 'cs'
+
+    # A Latin reference rendered in Hangul ('series' -> '시리즈') has no meaningful character
+    # distance. 'zero' calls it 0, which is the right verdict but gives two such takes the
+    # SAME score and so no spread between them. 'romanize' transliterates first so 시리즈 and
+    # 씨리즈 can still be ordered -- needs `pip install korean-romanizer`, and silently falls
+    # back to 'zero' behaviour if it is missing.
+    seg_cross_script: zero
+
+    # Step 0. Segments the recogniser mishears on the GROUND TRUTH recording are a scorer
+    # limitation, not a synthesis fault: on Korean_102_0 the real human audio scores 슬링소
+    # 0.667 and 랜취미 0.667, and no policy can fix either. Build the gate once --
+    #   python whisper_ft/build_seg_gate.py --split train --device cuda:0
+    # on a 40-utterance probe it kept 93.1% of segments -- then point this at the .pt. Left
+    # null, training simply runs without the gate: a segment the scorer always gets wrong
+    # tends to be wrong for every take too, so the spread collapses and it drops out anyway.
+    # The gate matters for the ones it gets wrong INCONSISTENTLY, which look like signal.
+    seg_gate: null
+    # seg_gate: ""
+
+    seg_std_floor: 1.0e-6    # below this the takes are treated as agreeing -> segment skipped
+    seg_min_takes: 2         # a segment needs this many scored takes to be normalised
+    seg_norm: masked         # 'masked' averages the policy term over the tokens that carry
+                             # an advantage; 'all' divides by the full rollout length, which
+                             # makes the step scale with how much of the sentence disagreed
+    seg_kl_mask: false       # keep the KL on every token: it is a leash on the whole policy,
+                             # not a credit signal, and releasing it outside the active
+                             # segments would let the rest of the utterance drift
+
+    # Curves the segment executor adds:
+    #   seg_active / seg_total  segments carrying signal. THE headline number -- this is what
+    #                           the design buys over one scalar per rollout. Falling to 0
+    #                           means the takes no longer disagree anywhere (converged, or
+    #                           sampling too cold -- raise rollout_n or the temperature).
+    #   seg_flat                segments the takes agreed on, deliberately untrained.
+    #   seg_active_en_share     share of active segments that are English. Near 1 means the
+    #                           signal really is on the embedded language; falling is early
+    #                           warning that the matrix language has started to wobble.
+    #   adv_coverage            fraction of a take's tokens receiving any advantage.
+    #   adv_abs                 mean |advantage| applied, i.e. the signal size.
+
+    # --- reward: mer (examples/grpo/cosyvoice2/reward_cs_mer.py) ---
+    # the LoRA already folded in (whisper_ft/merge_adapter.py). Must be a MERGED
+    # checkpoint, not base+adapter: peft is installed in the cosyvoice2 env but not
+    # in `cosyvoice`, where this recipe runs, so PeftModel could not load at all.
+    # Merging also drops the adapter matmul from every decode, and this reward
+    # decodes once per rollout.
+    mer_model: ""
+    mer_adapter: null      # set only if mer_model is the un-merged base checkpoint
+    mer_dtype: float16
+    mer_num_beams: 1         # greedy. This reward decodes autoregressively for EVERY
+                             # rollout -- rollout_n=4 per prompt -- so it is by far the
+                             # most expensive of the five. Beams would multiply that again.
+    mer_max_new_tokens: 200
+
+    # --- reward: duration (examples/grpo/cosyvoice2/reward_cs_duration.py) ---
+    dur_tol: 0.20            # relative length error that still scores 0.5. The failure it
+                             # exists for is the kor-eng speaking rate falling 45% after
+                             # SFT while the text stayed readable, which no content reward
+                             # can see.
+
+    # en_lexicon:            # only for a Latin-script matrix language (German, French):
+                             # script alone cannot tell 'Legierungen' from 'basically'.
+                             # Unused for Mandarin / Cantonese / Japanese / Korean.
+
+    log_every: 1          # write one permanent log line every N batches; tqdm
+                          # alone overwrites its line so the history is lost
+    ppo_epochs: 2         # gradient steps per rollout batch. >1 makes the samples
+                          # off-policy, which is what ratio+clip exist to bound.
+    clip_eps: 0.2         # PPO clip range. Once a sample's ratio leaves 1±eps the clipped
+                          # branch is selected and its gradient is zero -- the brake that
+                          # stops over-optimising a stale sample.
+    rollout_n: 4          # group size. Must be >= 2: the advantage is normalised within
+                          # the group, so a singleton always has zero advantage.
+    kl_coef: 0.02         # penalty against the FROZEN initial policy, using the k3
+                          # estimator exp(d)-d-1. The alignment reward pays for slow
+                          # over-articulation, so without this the policy has a cheap way
+                          # to drift away from natural speech. Costs a frozen copy (~2GB)
+                          # and one extra forward per rollout.
+    top_k: 25             # sampling for the rollouts; matches the inference recipe
+    max_token_text_ratio: 20
+    min_token_text_ratio: 2
+    token2wav_fp16: True
+
+    # --- reward (examples/grpo/cosyvoice2/reward_cs_wer.py) ---
+    alpha: 1.0            # weight on R_matrix   (base language)
+    beta: 2.0             # weight on R_embedded (inserted English). Higher because English
+                          # is the minority of each utterance by duration yet is the part
+                          # that regressed after SFT.
+    min_span_sec: 0.60    # spans shorter than this are dropped: an ASR cannot transcribe a
+                          # short clip out of context ('output' 0.38s -> 'Ill.', 'writers'
+                          # 0.52s -> 'Res.'), and scoring them pins R_embedded to ~0 so
+                          # every GRPO group degenerates. Measured on the training data,
+                          # English spans run 0.24/0.46/1.20/2.81/7.37s (min/p25/med/p75/max),
+                          # so 0.60 keeps 68% of them and drops the unmeasurable tail.
+                          # Matrix spans (median 3.07s) are unaffected.
+    span_pad: 0.05        # crop padding; larger drags in the neighbouring language
+    ins_weight: 0.5       # insertions count half, since padding causes a few by design
+    sharpness: 3.0        # reward = 1 - tanh(sharpness * err_rate)
+    cv_max_utts: 64       # dev utterances scored per epoch
+
+# gan train conf
+train_conf_gan:
+    optim: adam
+    optim_conf:
+        lr: 0.0002 # use small lr for gan training
+    scheduler: constantlr
+    optim_d: adam
+    optim_conf_d:
+        lr: 0.0002 # use small lr for gan training
+    scheduler_d: constantlr
+    max_epoch: 8
+    grad_clip: 5
+    accum_grad: 1 # in gan training, accum_grad must be 1
+    log_interval: 100
+    save_per_step: -1
