@@ -286,7 +286,7 @@
 const SYSTEMS = [
   { folder: "GT",     name: "Ground Truth", desc: "Recorded reference speech from the test set." },
   { folder: "SFT",    name: "SFT",          desc: "CosyVoice2 whose text-to-token language model is fine-tuned on code-switching data. The flow-matching decoder and vocoder are kept frozen." },
-  { folder: "DPO",    name: "SFT + DPO",    desc: "The SFT model further trained with direct preference optimization." },
+  { folder: "DPO",    name: "DPO",    desc: "The SFT model further trained with direct preference optimization." },
   { folder: "CS3",    name: "CS3",          desc: "SFT with keyword highlighting of embedded English spans in the input text, following CS3-Bench." },
   { folder: "SegRPO", name: "SegRPO",       desc: "Our method. Starting from the SFT checkpoint, the model is trained with group relative policy optimization whose advantages are computed for each segment between language switch points.", ours: true }
 ];
