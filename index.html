@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SegRPO Demo</title>
+<meta name="description" content="Audio samples for SegRPO, segment-level group relative policy optimization for code-switching TTS.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f6f5f1;
+    --surface: #ffffff;
+    --ink: #1b1d22;
+    --muted: #5d626d;
+    --line: #e2e0d8;
+    --wave: #c8cbd2;
+    --wave-played: #1b1d22;
+    --accent: #0e6b62;
+    --accent-soft: #e3f1ee;
+    --accent-line: #9fd0c7;
+    --mark: #fbe9bf;
+    --btn: #1b1d22;
+    --btn-ink: #ffffff;
+    --font-sans: "Inter", -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Hiragino Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --font-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121317;
+      --surface: #1a1c22;
+      --ink: #eceef2;
+      --muted: #a2a7b3;
+      --line: #2b2e36;
+      --wave: #474c58;
+      --wave-played: #eceef2;
+      --accent: #4fd1bd;
+      --accent-soft: #15302d;
+      --accent-line: #2d6b61;
+      --mark: #4a3d1a;
+      --btn: #eceef2;
+      --btn-ink: #121317;
+      color-scheme: dark;
+    }
+    :root:not([data-theme="light"]) .tile.ours { --wave-played: var(--accent); }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121317;
+    --surface: #1a1c22;
+    --ink: #eceef2;
+    --muted: #a2a7b3;
+    --line: #2b2e36;
+    --wave: #474c58;
+    --wave-played: #eceef2;
+    --accent: #4fd1bd;
+    --accent-soft: #15302d;
+    --accent-line: #2d6b61;
+    --mark: #4a3d1a;
+    --btn: #eceef2;
+    --btn-ink: #121317;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+  /* Header */
+  header.hero { padding: 72px 0 40px; border-bottom: 1px solid var(--line); }
+  .eyebrow {
+    margin: 0 0 18px;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  h1 {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-weight: 600;
+    font-size: clamp(40px, 7vw, 64px);
+    line-height: 1.05;
+    letter-spacing: -0.01em;
+  }
+  .subtitle {
+    margin: 14px 0 0;
+    max-width: 760px;
+    font-family: var(--font-serif);
+    font-weight: 500;
+    font-size: clamp(20px, 2.6vw, 26px);
+    line-height: 1.35;
+  }
+  .authors { margin: 22px 0 0; color: var(--muted); font-size: 15px; }
+
+  /* Sections */
+  section { padding: 48px 0 8px; }
+  h2 {
+    margin: 0 0 16px;
+    font-family: var(--font-serif);
+    font-weight: 600;
+    font-size: 28px;
+    line-height: 1.2;
+  }
+  .prose { max-width: 760px; margin: 0; }
+  .prose + .prose { margin-top: 12px; }
+  .note { color: var(--muted); font-size: 15px; }
+
+  /* Systems list */
+  .systems {
+    display: grid;
+    grid-template-columns: minmax(120px, 160px) 1fr;
+    margin: 0;
+    border-top: 1px solid var(--line);
+    max-width: 860px;
+  }
+  .systems dt, .systems dd {
+    margin: 0;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .systems dt { font-weight: 600; padding-right: 16px; }
+  .systems dd { color: var(--muted); }
+  .systems dt.ours { color: var(--accent); }
+
+  /* Language nav */
+  .lang-nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 24px; padding: 0; list-style: none; }
+  .lang-nav a {
+    display: inline-block;
+    padding: 6px 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+  }
+  .lang-nav a:hover { border-color: var(--ink); }
+
+  /* Language block */
+  .lang {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 24px;
+    margin: 0 0 20px;
+    scroll-margin-top: 16px;
+  }
+  .lang-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 0 0 16px; }
+  .lang-head h3 { margin: 0; font-size: 20px; font-weight: 600; }
+  .lang-head .src { color: var(--muted); font-size: 14px; }
+  .sample + .sample { margin-top: 24px; padding-top: 24px; border-top: 1px dashed var(--line); }
+  .sample-label { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+  .transcript {
+    margin: 0 0 16px;
+    font-size: 17px;
+    line-height: 1.7;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+  }
+  .transcript mark { background: var(--mark); color: inherit; padding: 1px 3px; border-radius: 3px; }
+
+  /* Players */
+  .players {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .tile {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 12px 10px;
+    background: var(--surface);
+    min-width: 0;
+  }
+  .tile.ours { border-color: var(--accent-line); background: var(--accent-soft); --wave-played: var(--accent); }
+  .tile-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 10px; }
+  .sys { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile.ours .sys { color: var(--accent); }
+  .badge {
+    flex: none;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--accent-line);
+    border-radius: 999px;
+    padding: 1px 8px;
+  }
+  .ctrl { display: flex; align-items: center; gap: 10px; }
+  .pp {
+    flex: none;
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--btn);
+    color: var(--btn-ink);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    padding: 0;
+  }
+  .tile.ours .pp { background: var(--accent); color: var(--surface); }
+  .pp:focus-visible, .wave:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .pp svg { width: 14px; height: 14px; display: block; }
+  .pp .i-pause { display: none; }
+  .tile.playing .pp .i-play { display: none; }
+  .tile.playing .pp .i-pause { display: block; }
+  .wave { flex: 1; min-width: 0; height: 36px; display: block; cursor: pointer; border-radius: 4px; }
+  .time { margin: 6px 0 0; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+
+  footer { padding: 40px 0 64px; color: var(--muted); font-size: 14px; }
+
+  @media (max-width: 640px) {
+    .wrap { padding: 0 16px; }
+    header.hero { padding: 48px 0 32px; }
+    section { padding-top: 36px; }
+    .lang { padding: 16px; border-radius: 12px; }
+    .systems { grid-template-columns: 1fr; }
+    .systems dt { padding-bottom: 0; border-bottom: 0; }
+    .systems dd { padding-top: 2px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">Audio samples &middot; Anonymous submission</p>
+    <h1>SegRPO</h1>
+    <p class="subtitle">Group Relative Policy Optimization with Segment-Level Advantages for Code-Switching TTS</p>
+    <p class="authors">Anonymous Authors</p>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section id="overview">
+    <h2>Overview</h2>
+    <p class="prose">SegRPO is a reinforcement learning method for code-switching text-to-speech. Each sampled utterance is divided at language switch points, and every segment is scored by its character error rate. Advantages are normalized within the rollout group separately for each segment, so a segment that all rollouts render equally well contributes no update and training concentrates on the segments that differ. All generated samples on this page share the CosyVoice2 backbone, and SegRPO is initialized from the SFT checkpoint.</p>
+  </section>
+
+  <section id="systems">
+    <h2>Systems</h2>
+    <dl class="systems" id="system-list"></dl>
+  </section>
+
+  <section id="samples">
+    <h2>Audio samples</h2>
+    <p class="prose note" id="samples-note">Each block compares the same input text across all systems. Click a waveform to play from that point. Starting one sample pauses any other.</p>
+    <ul class="lang-nav" id="lang-nav" style="margin-top:20px"></ul>
+    <div id="sample-list"></div>
+    <noscript><p class="prose">JavaScript is required to play the audio samples on this page.</p></noscript>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p class="prose">Generated speech is presented without loudness normalization. This page accompanies an anonymous submission.</p>
+  </div>
+</footer>
+
+<script>
+/* ==========================================================================
+   Configuration
+   Audio path pattern: audio/<language folder>/<system folder>/<file>
+   To add a sample, put the wav files in each system folder and append
+   { file: "...", text: "..." } to the language's samples array.
+   Leave text empty to hide the transcript line.
+   ========================================================================== */
+const SYSTEMS = [
+  { folder: "GT",     name: "Ground Truth", desc: "Recorded reference speech from the test set." },
+  { folder: "SFT",    name: "SFT",          desc: "CosyVoice2 whose text-to-token language model is fine-tuned on code-switching data. The flow-matching decoder and vocoder are kept frozen." },
+  { folder: "DPO",    name: "SFT + DPO",    desc: "The SFT model further trained with direct preference optimization." },
+  { folder: "CS3",    name: "CS3",          desc: "SFT with keyword highlighting of embedded English spans in the input text, following CS3-Bench." },
+  { folder: "SegRPO", name: "SegRPO",       desc: "Our method. Starting from the SFT checkpoint, the model is trained with group relative policy optimization whose advantages are computed for each segment between language switch points.", ours: true }
+];
+
+const LANGUAGES = [
+  { id: "cantonese", name: "Cantonese-English", source: "SwitchLingua", folder: "Cantonese",
+    samples: [ { file: "Cantonese_1576_1.wav", text: "" } ] },
+  { id: "mandarin",  name: "Mandarin-English",  source: "SwitchLingua", folder: "Chinese",
+    samples: [ { file: "Mandarin_139_3.wav", text: "" } ] },
+  { id: "japanese",  name: "Japanese-English",  source: "CS-FLEURS read test", folder: "Japanese",
+    samples: [ { file: "csf_read_test_jpn_1762_SS.wav", text: "" } ] },
+  { id: "korean",    name: "Korean-English",    source: "CS-FLEURS read test", folder: "Korean",
+    samples: [ { file: "csf_read_test_kor_1705_EY.wav", text: "" } ] }
+];
+
+/* ==========================================================================
+   Rendering
+   ========================================================================== */
+const ICON_PLAY  = '<svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9.5-5.5z" fill="currentColor"/></svg>';
+const ICON_PAUSE = '<svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z" fill="currentColor"/></svg>';
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+/* Highlight runs of Latin-script words, i.e. the embedded English spans. */
+function highlightEmbedded(text) {
+  const safe = esc(text);
+  return safe.replace(/[A-Za-z][A-Za-z0-9'’.\-]*(?:[ \t]+[A-Za-z0-9][A-Za-z0-9'’.\-]*)*/g, m => "<mark>" + m + "</mark>");
+}
+
+function renderSystems() {
+  const dl = document.getElementById("system-list");
+  dl.innerHTML = SYSTEMS.map(s =>
+    `<dt class="${s.ours ? "ours" : ""}">${esc(s.name)}</dt><dd>${esc(s.desc)}</dd>`
+  ).join("");
+}
+
+function renderSamples() {
+  document.getElementById("lang-nav").innerHTML = LANGUAGES.map(l =>
+    `<li><a href="#${l.id}">${esc(l.name)}</a></li>`
+  ).join("");
+
+  const anyText = LANGUAGES.some(l => l.samples.some(s => s.text && s.text.trim()));
+  if (anyText) {
+    document.getElementById("samples-note").textContent =
+      "Each block compares the same input text across all systems. Embedded English spans in the transcript are highlighted. Click a waveform to play from that point. Starting one sample pauses any other.";
+  }
+
+  const html = LANGUAGES.map(l => {
+    const samples = l.samples.map((s, i) => {
+      const label = l.samples.length > 1 ? `<p class="sample-label">Sample ${i + 1}</p>` : "";
+      const text = s.text && s.text.trim() ? `<p class="transcript">${highlightEmbedded(s.text.trim())}</p>` : "";
+      const tiles = SYSTEMS.map(sys => {
+        const src = `audio/${l.folder}/${sys.folder}/${s.file}`;
+        return `<div class="tile${sys.ours ? " ours" : ""}" data-src="${esc(src)}">
+            <div class="tile-head"><span class="sys">${esc(sys.name)}</span>${sys.ours ? '<span class="badge">Ours</span>' : ""}</div>
+            <div class="ctrl">
+              <button class="pp" type="button" aria-label="Play ${esc(sys.name)}, ${esc(l.name)}">${ICON_PLAY}${ICON_PAUSE}</button>
+              <canvas class="wave" tabindex="0" role="slider" aria-label="Seek ${esc(sys.name)}, ${esc(l.name)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></canvas>
+            </div>
+            <p class="time"><span class="cur">0:00</span> / <span class="dur">-:--</span></p>
+          </div>`;
+      }).join("");
+      return `<div class="sample">${label}${text}<div class="players">${tiles}</div></div>`;
+    }).join("");
+    return `<article class="lang" id="${l.id}">
+        <div class="lang-head"><h3>${esc(l.name)}</h3><span class="src">${esc(l.source)}</span></div>
+        ${samples}
+      </article>`;
+  }).join("");
+  document.getElementById("sample-list").innerHTML = html;
+}
+
+/* ==========================================================================
+   Player with waveform
+   ========================================================================== */
+const players = [];
+let audioCtx = null;
+
+function getCtx() {
+  if (!audioCtx) {
+    const C = window.AudioContext || window.webkitAudioContext;
+    if (C) { try { audioCtx = new C(); } catch (e) { audioCtx = null; } }
+  }
+  return audioCtx;
+}
+
+function decode(buf) {
+  const ctx = getCtx();
+  if (!ctx) return Promise.reject(new Error("no audio context"));
+  return new Promise((resolve, reject) => {
+    const p = ctx.decodeAudioData(buf, resolve, reject);
+    if (p && typeof p.then === "function") p.then(resolve, reject);
+  });
+}
+
+/* Peak envelope with N buckets, normalized per file so every waveform uses the full height. */
+function computePeaks(audioBuffer, n) {
+  const ch = audioBuffer.getChannelData(0);
+  const size = Math.max(1, Math.floor(ch.length / n));
+  const peaks = new Float32Array(n);
+  let max = 0;
+  for (let i = 0; i < n; i++) {
+    const start = i * size;
+    const end = Math.min(start + size, ch.length);
+    let m = 0;
+    for (let j = start; j < end; j++) {
+      const v = ch[j] < 0 ? -ch[j] : ch[j];
+      if (v > m) m = v;
+    }
+    peaks[i] = m;
+    if (m > max) max = m;
+  }
+  if (max > 0) for (let i = 0; i < n; i++) peaks[i] /= max;
+  return peaks;
+}
+
+function fmt(t) {
+  if (!isFinite(t) || t < 0) return "-:--";
+  const m = Math.floor(t / 60);
+  const s = Math.floor(t % 60);
+  return m + ":" + (s < 10 ? "0" : "") + s;
+}
+
+function progressOf(p) {
+  const d = p.audio.duration || p.duration;
+  if (!d || !isFinite(d)) return 0;
+  const t = p.pending != null ? p.pending * d : p.audio.currentTime;
+  return Math.min(1, Math.max(0, t / d));
+}
+
+function draw(p) {
+  const c = p.canvas;
+  const w = c.clientWidth;
+  const h = c.clientHeight;
+  if (!w || !h) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = Math.round(w * dpr), H = Math.round(h * dpr);
+  if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+  const g = c.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+
+  const cs = getComputedStyle(p.tile);
+  const colWave = cs.getPropertyValue("--wave").trim();
+  const colPlayed = cs.getPropertyValue("--wave-played").trim();
+
+  const bar = 2, gap = 1, step = bar + gap;
+  const nb = Math.max(1, Math.floor(w / step));
+  const prog = progressOf(p);
+
+  for (let i = 0; i < nb; i++) {
+    let v = 0.06;
+    if (p.peaks) {
+      const a = Math.floor(i * p.peaks.length / nb);
+      const b = Math.max(a + 1, Math.floor((i + 1) * p.peaks.length / nb));
+      v = 0;
+      for (let k = a; k < b && k < p.peaks.length; k++) if (p.peaks[k] > v) v = p.peaks[k];
+    }
+    const bh = Math.max(2, v * (h - 4));
+    g.fillStyle = (i + 0.5) / nb <= prog ? colPlayed : colWave;
+    g.fillRect(i * step, (h - bh) / 2, bar, bh);
+  }
+  c.setAttribute("aria-valuenow", String(Math.round(prog * 100)));
+}
+
+function updateTime(p) {
+  const d = p.audio.duration && isFinite(p.audio.duration) ? p.audio.duration : p.duration;
+  p.curEl.textContent = fmt(progressOf(p) * (d || 0));
+  p.durEl.textContent = fmt(d);
+}
+
+/* Fetch and decode for the waveform. Playback uses the audio element, so it still works if this fails. */
+function loadWaveform(p) {
+  if (p.loading) return;
+  p.loading = true;
+  fetch(p.src)
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+    .then(decode)
+    .then(buf => {
+      p.peaks = computePeaks(buf, 1200);
+      p.duration = buf.duration;
+      updateTime(p);
+      draw(p);
+    })
+    .catch(() => {
+      p.audio.preload = "metadata";
+      p.audio.load();
+    });
+}
+
+function tick() {
+  let active = false;
+  for (const p of players) {
+    if (!p.audio.paused) { active = true; draw(p); updateTime(p); }
+  }
+  if (active) requestAnimationFrame(tick);
+}
+
+function playOnly(p) {
+  for (const o of players) if (o !== p && !o.audio.paused) o.audio.pause();
+  const r = p.audio.play();
+  if (r && typeof r.catch === "function") r.catch(() => {});
+}
+
+function seekTo(p, frac) {
+  frac = Math.min(1, Math.max(0, frac));
+  const a = p.audio;
+  if (a.readyState >= 1 && isFinite(a.duration)) {
+    a.currentTime = frac * a.duration;
+    p.pending = null;
+  } else {
+    p.pending = frac;
+    a.addEventListener("loadedmetadata", () => {
+      if (p.pending != null) { a.currentTime = p.pending * a.duration; p.pending = null; }
+    }, { once: true });
+  }
+  draw(p);
+  updateTime(p);
+}
+
+function initPlayers() {
+  document.querySelectorAll(".tile").forEach(tile => {
+    const audio = new Audio();
+    audio.preload = "none";
+    const p = {
+      tile,
+      src: tile.dataset.src,
+      audio,
+      canvas: tile.querySelector(".wave"),
+      btn: tile.querySelector(".pp"),
+      curEl: tile.querySelector(".cur"),
+      durEl: tile.querySelector(".dur"),
+      peaks: null,
+      duration: 0,
+      pending: null,
+      loading: false
+    };
+    audio.src = p.src;
+    players.push(p);
+
+    audio.addEventListener("play", () => { tile.classList.add("playing"); requestAnimationFrame(tick); });
+    audio.addEventListener("pause", () => { tile.classList.remove("playing"); draw(p); updateTime(p); });
+    audio.addEventListener("ended", () => { tile.classList.remove("playing"); audio.currentTime = 0; draw(p); updateTime(p); });
+    audio.addEventListener("loadedmetadata", () => updateTime(p));
+    audio.addEventListener("seeked", () => { draw(p); updateTime(p); });
+
+    p.btn.addEventListener("click", () => {
+      if (audio.paused) {
+        if (audio.ended) audio.currentTime = 0;
+        playOnly(p);
+      } else {
+        audio.pause();
+      }
+    });
+
+    p.canvas.addEventListener("click", e => {
+      const r = p.canvas.getBoundingClientRect();
+      seekTo(p, (e.clientX - r.left) / r.width);
+      playOnly(p);
+    });
+
+    p.canvas.addEventListener("keydown", e => {
+      const d = audio.duration || p.duration;
+      if (!d) return;
+      const cur = audio.currentTime / d;
+      if (e.key === "ArrowRight") { seekTo(p, cur + 1 / d); e.preventDefault(); }
+      else if (e.key === "ArrowLeft") { seekTo(p, cur - 1 / d); e.preventDefault(); }
+      else if (e.key === " " || e.key === "Enter") { p.btn.click(); e.preventDefault(); }
+    });
+
+    draw(p);
+  });
+
+  /* Load waveforms only when a block comes near the viewport. */
+  if ("IntersectionObserver" in window) {
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(en => {
+        if (!en.isIntersecting) return;
+        const p = players.find(x => x.tile === en.target);
+        if (p) loadWaveform(p);
+        io.unobserve(en.target);
+      });
+    }, { rootMargin: "300px 0px" });
+    players.forEach(p => io.observe(p.tile));
+  } else {
+    players.forEach(loadWaveform);
+  }
+
+  let rt = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(rt);
+    rt = setTimeout(() => players.forEach(draw), 80);
+  });
+  if (window.matchMedia) {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const redraw = () => players.forEach(draw);
+    if (mq.addEventListener) mq.addEventListener("change", redraw);
+    else if (mq.addListener) mq.addListener(redraw);
+  }
+}
+
+renderSystems();
+renderSamples();
+initPlayers();
+</script>
+</body>
+</html>
